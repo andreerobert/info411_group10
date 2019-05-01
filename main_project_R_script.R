@@ -1,15 +1,16 @@
 library(readr)
 
 convict_registers <- read_csv("slqbritishconvictregisters201605.csv")
+# column 19, 20 missing column names
+
 
 convict_records <- read.delim("tmpMA2c8PConvict_records.txt", header = FALSE, sep = "\t")
-
-
+# all unknown column names
+# need to name the columns
+# code ..
 
 View(convict_registers)
 View(convict_records)
-
-
 
 
 # Requirements 1
@@ -35,9 +36,6 @@ date_of_departure <- #code
 # Requirements 4
 # 4. Explain why weak prediction or classification performance might still be of potential historical interest
 # in this particular application.
-
-
-
 
 
 
