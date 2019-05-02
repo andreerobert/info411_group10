@@ -1,5 +1,3 @@
-test
-
 # Define the problem and the goal
 
 library(readr)
