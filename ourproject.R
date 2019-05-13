@@ -575,6 +575,7 @@ write.csv(predictionconvictsdata, "imputdataforalgorithms.csv")
 Targets_train <- decodeClassLabels(predictionconvictsdata[,7])
 
 Targets_value <- predictionconvictsdata[,c(2,4,5)]
+  
 
 #standard split for training and test, plus normalizing of data
 trainset <- splitForTrainingAndTest(Targets_value, Targets_train, ratio=0.50)
