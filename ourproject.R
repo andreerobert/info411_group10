@@ -19,6 +19,12 @@ library(rpart)
 orginaldata <- read.csv("slqbritishconvictregisters201605.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE, strip.white=TRUE)
 
 
+
+
+#3.Present details of data pre-processing. This could include some merging of categories, if this is
+#considered to be appropriate
+
+
 #create our dataset of reduced attributes called convict - we remove all redundant columns leaving only; 
 #name, sentence details, departure date, place of arrival
 convictrelevantdata <- orginaldata[c(1,9,11,12)]
@@ -58,7 +64,7 @@ convictrelevantdata <- convictrelevantdata[!(convictrelevantdata$Date.of.Departu
 convictrelevantdata <- convictrelevantdata[!(convictrelevantdata$Date.of.Departure > "1867-12-31"),]
 
 
-
+write.csv(convictrelevantdata,'one.csv')
 
 
 
@@ -438,6 +444,7 @@ convictrelevantdata$Date.of.Sentence <- gsub('[.,]', '', convictrelevantdata$Dat
 convictrelevantdata$Date.of.Sentence <- gsub('th|rd|nd', '', convictrelevantdata$Date.of.Sentence)
 convictrelevantdata$Date.of.Sentence <- gsub(' Sept ', ' September ', convictrelevantdata$Date.of.Sentence)
 convictrelevantdata$Date.of.Sentence <- gsub('1st', '1', convictrelevantdata$Date.of.Sentence)
+convictrelevantdata$Date.of.Sentence <- gsub('\\]', '', convictrelevantdata$Date.of.Sentence)
 
 #real run... convert all values to date. This creates no NAs now that all data is fixed
 convictrelevantdata$Date.of.Sentence <-as.Date(convictrelevantdata$Date.of.Sentence, "%d %B %Y")
@@ -491,7 +498,7 @@ finalconvictsdata <- convictrelevantdata[,c(1,5,9,3,4,10,8)]
 finalconvictsdata <- finalconvictsdata[complete.cases(finalconvictsdata),]
 
 #remove unused data
-rm(convicts, orginaldata, counties, towns, i, rows)
+rm( orginaldata, counties, towns, i, rows)
 
 #write data to csv so you don't have to do everything above when crashing/reloading
 write.table(finalconvictsdata, file = "finalconvictsdata.csv", append = FALSE, quote = TRUE, sep = " ",
@@ -531,7 +538,7 @@ predictionconvictsdata$Date.of.Departure <- as.Date(predictionconvictsdata$Date.
 predictionconvictsdata$Date.of.Departure <- format(predictionconvictsdata$Date.of.Departure, format = "%Y")
 
 
-#convert date of departure to a scale of year by year
+#convert date of Sentence to a scale of year by year
 predictionconvictsdata$Date.of.Sentence <- as.Date(predictionconvictsdata$Date.of.Sentence)
 predictionconvictsdata$Date.of.Sentence <- format(predictionconvictsdata$Date.of.Sentence, format = "%Y")
 
@@ -561,7 +568,7 @@ write.csv(predictionconvictsdata, "imputdataforalgorithms.csv")
 
 
 ##########################################################
-##   11. MLP  (very bad at predicting!!!)               ##
+##   10. MLP  (very bad at predicting!!!)               ##
 ##########################################################
 
 #set Target atribute and training values
@@ -570,7 +577,7 @@ Targets_train <- decodeClassLabels(predictionconvictsdata[,7])
 Targets_value <- predictionconvictsdata[,c(2,4,5)]
 
 #standard split for training and test, plus normalizing of data
-trainset <- splitForTrainingAndTest(Targets_value, Targets_train, ratio=0.65)
+trainset <- splitForTrainingAndTest(Targets_value, Targets_train, ratio=0.50)
 trainset <- normTrainingAndTestSet(trainset, type = "norm")
 
 #train the MLP
@@ -591,11 +598,11 @@ confusionMatrix(trainset$targetsTest,predictTestSet)
 
 
 ##########################################################
-##   12. Trees                                          ##
+##   11. Trees                                          ##
 ##########################################################
 
 #rpart
-convicts.rpart <- rpart(Sentence.Duration ~ County.Colony + Place.of.Arrival + Date.of.Departure + Ticket.of.Leave, predictionconvictsdata)
+convicts.rpart <- rpart(Sentence.Duration ~ County.Colony + Place.of.Arrival + Date.of.Departure + Ticket.of.Leave, data  =predictionconvictsdata)
 print(convicts.rpart)
 plot(convicts.rpart)
 text(convicts.rpart)
@@ -606,7 +613,70 @@ convicts.ctree <- ctree(Sentence.Duration ~ County.Colony + Place.of.Arrival + D
 print(convicts.ctree)
 plot(convicts.ctree)
 
-convicts.rpart.predict <- predict(convicts.rpart,predictionconvictsdata,type= "class")
+convicts.rpart.predict <- predict(convicts.rpart,predictionconvictsdata,type= "vector")
+
+table(predictionconvictsdata$Sentence.Duration,convicts.rpart.predict)
+
+
+
+#2. Also, propose a classification algorithms to predict whether the convict received a ticket of leave as a
+#function of the place of trial, the place of arrival, and the date of departure, and the sentence
+
+
+##########################################################
+##   12. SOM (Start here)                               ##
+##########################################################
+# USES CONVICTS.NUM <<< (Numerical)
+train_data <- predictionconvictsdata[,c(2,4,5,6)] #relevant attributes
+
+#now train the SOM using the Kohonen method
+train_data_matrix <- as.matrix(scale(train_data))
+names(train_data_matrix) <- names(train_data)
+require ("kohonen")
+som_grid <- somgrid(xdim = 10, ydim =10, topo = "hexagonal")  
+
+# Train the SOM model!
+if (packageVersion("kohonen") < 3){
+  system.time(som_model <- som(train_data_matrix, 
+                               grid=som_grid, 
+                               rlen=1000, 
+                               alpha=c(0.9,0.01),
+                               n.hood = "circular",
+                               keep.data = TRUE ))
+}else{
+  system.time(som_model <- som(train_data_matrix, 
+                               grid=som_grid, 
+                               rlen=1000, 
+                               alpha=c(0.9,0.01),
+                               mode="online",
+                               normalizeDataLayers=false,
+                               keep.data = TRUE ))
+}
+summary(som_model)
+#remove grid, data train
+#rm(som_grid, data_train, data_train_matrix)
+#par(mfrow=c(2,2)) #split plot window 2*2
+#par(mfrow=c(1,1)) #restore plot window
+
+
+#6. Present performance measures of your classification results.
+
+#changes v iteration
+plot(som_model, type = "changes")
+#counts within nodes
+plot(som_model, type = "counts", main="Node Counts", palette.name=coolBlueHotRed)
+#map quality
+plot(som_model, type = "quality", main="Node Quality/Distance", palette.name=coolBlueHotRed)
+#neighbour distances
+plot(som_model, type="dist.neighbours", main = "SOM neighbour distances", palette.name=grey.colors)
+#codes
+plot(som_model, type = "codes")
+
+#Plot the original scale heatmap for a variable from the training set:
+var <- 4 #define the variable to plot
+var_unscaled <- aggregate(as.numeric(data_train[,var]), by=list(som_model$unit.classif), FUN=mean, simplify=TRUE)[,2]
+plot(som_model, type = "property", property=var_unscaled, main=names(data_train)[var], palette.name=coolBlueHotRed)
+rm(var_unscaled, var)
 
 
 ##########################################################
